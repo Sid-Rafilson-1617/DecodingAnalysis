@@ -686,8 +686,6 @@ def train_LSTM(model, train_loader, device, lr=0.01, epochs=1000, patience=50, m
             scaler.step(optimizer)
             scaler.update()
             epoch_loss += loss.item() * X_batch.size(0)
-            
-            epoch_loss += loss.item() * X_batch.size(0)
 
         # Average loss
         epoch_loss /= len(train_loader.dataset)
