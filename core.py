@@ -235,9 +235,10 @@ def align_brain_and_behavior(events: pd.DataFrame, spike_rates: np.ndarray, unit
     events : pd.DataFrame
         Behavioral tracking data containing columns:
         - 'timestamps_ms': Timestamps in milliseconds
-        - 'centroid_x', 'centroid_y': Position coordinates
+        - 'position_x', 'position_y': Position coordinates
         - 'velocity_x', 'velocity_y': Velocity components
         - 'speed': Overall movement speed
+        - 'reward_state': Reward state indicator
     
     spike_rates : np.ndarray
         Matrix of spike rates with shape (n_units, n_time_bins).
