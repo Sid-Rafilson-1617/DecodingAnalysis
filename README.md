@@ -1,8 +1,9 @@
 # DecodingAnalysis
 
-Tools for preprocessing neural data and training LSTM-based decoders of behavior.
+Tools for preprocessing neural and behavioral data and training LSTM-based decoders.
 
 ## Overview
+Decoding analysis of the clickbait-ephys experiments: freely moving simultanous tetrode recordings from the olfactory bulb and hippocampus with thermistor respiratory measurement and bottom up video tracking.
 - **core.py** – functions for loading Kilosort outputs, computing smoothed spike rates, and preparing datasets.
 - **LSTM_decoding.py** – training script for LSTM models that decode behavioral variables from neural activity.
 - **decoding_env_backup.yml** – conda environment with required dependencies.
