@@ -1,4 +1,4 @@
-from LSTM_general_core import *
+from core import *
 #os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 
