@@ -1,6 +1,6 @@
 # DecodingAnalysis
 
-Tools for preprocessing neural and behavioral data and training LSTM-based decoders.
+Tools for preprocessing neural & behavioral data, training & testing LSTM-based decoders, and postprocessing results.
 
 ## Overview
 Decoding analysis for the clickbait-ephys experiments: freely moving simultanous tetrode recordings from the olfactory bulb and hippocampus with thermistor respiratory measurement and bottom up video tracking.
