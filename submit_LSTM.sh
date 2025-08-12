@@ -1,17 +1,16 @@
 #!/bin/bash
 #SBATCH --account=smearlab
-#SBATCH --job-name=general_decode_lstm
+#SBATCH --job-name=decode_lstm
 #SBATCH --output=logs/slurm_%A_%a.out
 #SBATCH --error=logs/slurm_%A_%a.err
-#SBATCH --time=12:00:00
+#SBATCH --time=6:00:00
 #SBATCH --partition=gpu
 #SBATCH --cpus-per-task=3
 #SBATCH --mem-per-cpu=32G
 #SBATCH --gres=gpu:1
 #SBATCH --constraint=gpu-10gb
-#SBATCH --array=0-23
+#SBATCH --array=0-1
 #SBATCH --mail-type=BEGIN,END,FAIL
-#SBATCH --mail-user=sidr@uoregon.edu
 
 # Print start time and allocated resources
 echo "Job started at: $(date)"
@@ -28,10 +27,10 @@ fi
 
 
 # Define mice, targets, and sessions
-MICE=("6003")
-BEHAVIORS=("['position_x', 'position_y', 'velocity_x', 'velocity_y']" "['position_x', 'position_y', 'velocity_x', 'velocity_y', 'sns']" )
-SESSIONS=("3" "4" "5" "6" "7" "8" "9" "10" "11" "12" "13" "14")
-WINDOW_SIZES=("0.10")
+MICE=("6002")
+BEHAVIORS=("['position_x', 'position_y', 'sns']" )
+SESSIONS=("3")
+WINDOW_SIZES=("0.10" "1.0")
 SEQUENCE_LENGTHS=("8")
 
 
@@ -65,7 +64,7 @@ SEQUENCE=${SEQUENCE_LENGTHS[$SEQUENCE_INDEX]}
 
 
 # Define the data and save directories
-SAVE_DIR="/projects/smearlab/shared/clickbait-mmz/figures/encoding_8_4_25"
+SAVE_DIR="/projects/smearlab/shared/clickbait-mmz/figures/encoding_8_11_25"
 DATA_DIR="/gpfs/ceph/ceph-smeardata/clickbait-mmz"
 
 # Print to log
@@ -73,7 +72,7 @@ echo "Running decoding for mouse $MOUSE with behaviors $BEHAVIOR in session $SES
 
 
 # Run Python code
-python LSTM_general_decoding.py \
+python LSTM_decoding.py \
     --dir "$DATA_DIR" \
     --save_dir "$SAVE_DIR" \
     --use_behaviors "$BEHAVIOR" \
@@ -99,5 +98,5 @@ python LSTM_general_decoding.py \
     --fs 30000 \
     --sfs 1000 \
     --target_index "-1" \
-    --model_input "behavioral" \
+    --model_input "neural" \
     --batch_size 256
