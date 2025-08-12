@@ -178,6 +178,29 @@ def compute_spike_rates(kilosort_dir: str, sampling_rate: int, window_size: floa
 
 
 def compute_sniff_freqs_bins(sniff_params_file: str, time_bins: np.ndarray, window_size: float, sfs: int):
+    """Compute sniff statistics aligned to analysis time bins.
+
+    Parameters
+    ----------
+    sniff_params_file : str
+        Path to the MATLAB ``sniff_params`` file containing inhalation and
+        exhalation times.
+    time_bins : np.ndarray
+        Array of start times for each analysis bin in seconds.
+    window_size : float
+        Width of each time bin in seconds.
+    sfs : int
+        Sampling frequency of the sniff signal in Hz.
+
+    Returns
+    -------
+    tuple of np.ndarray
+        ``mean_freqs`` : Mean sniffing frequency within each bin.
+        ``inhalation_latencies`` : Time since the last inhalation at the
+        midpoint of each bin.
+        ``phases`` : Sniff phase at the midpoint of each bin in radians.
+    """
+
     inhalation_times, _, exhalation_times, _ = load_sniff_MATLAB(sniff_params_file)
     inhalation_times = inhalation_times / sfs  # Convert to seconds
 
@@ -238,7 +261,7 @@ def align_brain_and_behavior(events: pd.DataFrame, spike_rates: np.ndarray, unit
     ----------
     events : pd.DataFrame
         Behavioral tracking data containing columns:
-        - 'timestamps_ms': Timestamps in milliseconds
+        - 'timestamp_ms': Timestamps in milliseconds
         - 'position_x', 'position_y': Position coordinates
         - 'velocity_x', 'velocity_y': Velocity components
         - 'speed': Overall movement speed
@@ -260,6 +283,11 @@ def align_brain_and_behavior(events: pd.DataFrame, spike_rates: np.ndarray, unit
         Threshold for removing speed outliers, expressed as a multiplier of the
         standard deviation. Default is 4.0 (values > 4 × std are treated as
         outliers).
+    interp_method : str, optional
+        Interpolation method for filling missing values. Passed to
+        ``DataFrame.interpolate``. Default is ``'linear'``.
+    order : int, optional
+        Polynomial order to use when ``interp_method`` is ``'polynomial'``.
     
     Returns
     -------
@@ -269,6 +297,7 @@ def align_brain_and_behavior(events: pd.DataFrame, spike_rates: np.ndarray, unit
         - 'x', 'y': Position coordinates
         - 'v_x', 'v_y': Velocity components
         - 'speed': Movement speed
+        - 'reward_state': Reward indicator
         - 'time': Time bin start times
         
     Notes
@@ -350,36 +379,34 @@ def align_brain_and_behavior(events: pd.DataFrame, spike_rates: np.ndarray, unit
 
 def load_behavior(behavior_file: str, tracking_file: str = None) -> pd.DataFrame:
 
-    """
-    Load and preprocess behavioral tracking data from a CSV file.
-    
-    This function loads movement tracking data, normalizes spatial coordinates by
-    centering them around zero, calculates velocity components and overall speed,
-    and returns a filtered dataframe with relevant movement metrics.
-    
+    """Load and preprocess behavioral tracking data.
+
     Parameters
     ----------
     behavior_file : str
-        Path to the CSV file containing behavioral tracking data. The file should
-        include columns for 'centroid_x', 'centroid_y', and 'timestamps_ms'.
-        
+        Directory containing ``events.csv`` with task variables and timestamps.
+    tracking_file : str, optional
+        Path to an optional SLEAP ``*.analysis.h5`` tracking file. When provided,
+        nose coordinates from this file replace those in ``events.csv``.
+
     Returns
     -------
-    events : pandas.DataFrame
-        Processed dataframe containing the following columns:
-        - 'time': Original time values
-        - 'centroid_x': Zero-centered x coordinates 
-        - 'centroid_y': Zero-centered y coordinates
-        - 'velocity_x': Rate of change in x position
-        - 'velocity_y': Rate of change in y position
-        - 'speed': Overall movement speed (Euclidean norm of velocity components)
-        - 'timestamps_ms': Timestamps in milliseconds
-        
+    pandas.DataFrame
+        Dataframe with columns:
+        - ``position_x`` and ``position_y``: Zero-centered spatial coordinates
+        - ``velocity_x`` and ``velocity_y``: Velocity components
+        - ``reward_state``: Task variable indicating reward delivery
+        - ``speed``: Movement speed in pixels per sample
+        - ``timestamp_ms``: Timestamps in milliseconds
+
     Notes
     -----
-    - Position coordinates are normalized by subtracting the mean to center around zero
-    - Velocity is calculated using first-order differences (current - previous position)
-    - The first velocity value uses the first position value as the "previous" position
+    - Position coordinates are normalized by subtracting the mean to center around
+      zero
+    - Velocity is calculated using first-order differences (current - previous
+      position)
+    - The first velocity value uses the first position value as the "previous"
+      position
     - Speed is calculated as the Euclidean distance between consecutive positions
     """
 
@@ -415,9 +442,19 @@ def load_behavior(behavior_file: str, tracking_file: str = None) -> pd.DataFrame
 
 
 def load_sniff_MATLAB(file: str) -> np.array:
-    '''
-    Loads a MATLAB file containing sniff data and returns a numpy array
-    '''
+    """Load sniff parameters from a MATLAB file.
+
+    Parameters
+    ----------
+    file : str
+        Path to the MATLAB ``sniff_params`` file.
+
+    Returns
+    -------
+    tuple of np.ndarray
+        ``inhalation_times``, ``inhalation_voltage``, ``exhalation_times`` and
+        ``exhalation_voltage`` arrays.
+    """
 
     mat = loadmat(file)
     sniff_params = mat['sniff_params']
@@ -442,7 +479,39 @@ def load_sniff_MATLAB(file: str) -> np.array:
 
 # Main preprocessing function to load and align data
 
-def preprocess(data_dir, save_dir, mouse, session, window_size, step_size, sigma_smooth, use_units, nfs = 30_000, sfs = 1_000):
+def preprocess(
+    data_dir,
+    save_dir,
+    mouse,
+    session,
+    window_size,
+    step_size,
+    sigma_smooth,
+    use_units,
+    nfs=30_000,
+    sfs=1_000,
+):
+    """Load and align neural, sniffing and behavioral data for decoding.
+
+    Parameters
+    ----------
+    data_dir : str
+        Root directory containing neural, sniff and behavior subfolders.
+    save_dir : str
+        Directory where diagnostic plots will be written.
+    mouse, session : str
+        Identifiers selecting the recording to process.
+    window_size, step_size : float
+        Parameters for computing spike rates in seconds.
+    sigma_smooth : float
+        Standard deviation of the Gaussian temporal smoothing kernel.
+    use_units : str
+        Kilosort unit label(s) to include (e.g. ``'good/mua'``).
+    nfs : int, optional
+        Neural sampling frequency in Hz.
+    sfs : int, optional
+        Sniff signal sampling frequency in Hz.
+    """
 
     # Loading the neural data and computing the spike rates
     kilosort_dir = os.path.join(data_dir, 'kilosorted', mouse, session)
@@ -595,18 +664,33 @@ def cv_split(data, k, k_CV=10, n_blocks=10):
 
 
 class SequenceDataset(Dataset):
+    """Dataset of sequential samples for LSTM training.
+
+    Parameters
+    ----------
+    X, y : array_like
+        Input features and targets aligned in time.
+    blocks : list of tuple
+        (start, end) indices indicating continuous blocks within the data.
+    sequence_length : int
+        Length of each input sequence presented to the model.
+    target_index : int, optional
+        Index within each sequence from which the target value is taken. Negative
+        values index from the end of the sequence.
+    """
+
     def __init__(self, X, y, blocks, sequence_length, target_index=-1):
         self.X = torch.tensor(X, dtype=torch.float32)
         self.y = torch.tensor(y, dtype=torch.float32)
         self.sequence_length = sequence_length
 
-
-
         # Validate range and allow negative indexing
         if target_index < 0:
             target_index = target_index + sequence_length
         if not (-sequence_length <= target_index < sequence_length):
-            raise ValueError(f"target_index must be in range [-{sequence_length}, {sequence_length - 1}], got {target_index}")
+            raise ValueError(
+                f"target_index must be in range [-{sequence_length}, {sequence_length - 1}], got {target_index}"
+            )
 
         self.target_index = target_index
 
@@ -626,45 +710,67 @@ class SequenceDataset(Dataset):
         return X_seq, y_target
 
 class LSTMDecoder(nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim, num_layers = 1, dropout = 0.1):
+    """Simple LSTM-based decoder for time-series regression."""
+
+    def __init__(self, input_dim, hidden_dim, output_dim, num_layers=1, dropout=0.1):
         super(LSTMDecoder, self).__init__()
-        self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers=num_layers, batch_first=True, dropout=dropout, bidirectional=False)
+        self.lstm = nn.LSTM(
+            input_dim,
+            hidden_dim,
+            num_layers=num_layers,
+            batch_first=True,
+            dropout=dropout,
+            bidirectional=False,
+        )
         self.fc = nn.Linear(hidden_dim, output_dim)
 
     def forward(self, x):
+        """Run the LSTM decoder forward."""
         lstm_out, _ = self.lstm(x)
         return self.fc(lstm_out[:, -1, :])
 
 
-def train_LSTM(model, train_loader, device, lr=0.01, epochs=1000, patience=50, min_delta=0.1, factor=0.1, verbose=False):
-    """
-    Train the LSTM model with early stopping and learning rate scheduling.
-    
+def train_LSTM(
+    model,
+    train_loader,
+    device,
+    lr=0.01,
+    epochs=1000,
+    patience=50,
+    min_delta=0.1,
+    factor=0.1,
+    verbose=False,
+):
+    """Train an LSTM model with early stopping and learning-rate scheduling.
+
     Parameters
     ----------
-    model : MLPModel
-        The model to train
-    X : torch.Tensor
-        Input features
-    y : torch.Tensor
-        Target values
-    lr : float
-        Initial learning rate
-    epochs : int
-        Maximum number of epochs
-    patience : int
-        Number of epochs with no improvement after which training will be stopped
-    min_delta : float
-        Minimum change in loss to qualify as an improvement
-    factor : float
-        Factor by which the learning rate will be reduced
-        
+    model : torch.nn.Module
+        LSTM model to train.
+    train_loader : DataLoader
+        DataLoader yielding input sequences and targets for training.
+    device : torch.device
+        Device on which to perform training.
+    lr : float, optional
+        Initial learning rate.
+    epochs : int, optional
+        Maximum number of training epochs.
+    patience : int, optional
+        Number of epochs with no improvement before stopping early.
+    min_delta : float, optional
+        Minimum change in loss to qualify as an improvement.
+    factor : float, optional
+        Factor by which the learning rate is reduced when plateaus are
+        detected.
+    verbose : bool, optional
+        If ``True``, print training progress information.
+
     Returns
     -------
-    model : MLPModel
-        The trained model
+    model : torch.nn.Module
+        The trained model with the best-performing weights.
     history : list
-        Training loss history
+        Per-epoch training loss values.
     """
     # Initialize the training parameters
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
@@ -735,10 +841,70 @@ def train_LSTM(model, train_loader, device, lr=0.01, epochs=1000, patience=50, m
     
 
 
-def process_fold(X_train, X_test, y_train, y_test, train_switch_ind, test_switch_ind, current_save_path,
-        device = None, shift = 0, k = 0, hidden_dim = 8, num_layers = 2, dropout = 0.1, sequence_length = 3, target_index = -1, 
-        batch_size = 64, lr = 0.01, num_epochs = 300, patience = 10, min_delta = 0.01, factor = 0.5, plot_predictions = True):
-    
+def process_fold(
+    X_train,
+    X_test,
+    y_train,
+    y_test,
+    train_switch_ind,
+    test_switch_ind,
+    current_save_path,
+    device=None,
+    shift=0,
+    k=0,
+    hidden_dim=8,
+    num_layers=2,
+    dropout=0.1,
+    sequence_length=3,
+    target_index=-1,
+    batch_size=64,
+    lr=0.01,
+    num_epochs=300,
+    patience=10,
+    min_delta=0.01,
+    factor=0.5,
+    plot_predictions=True,
+):
+    """Train and evaluate a model for a single cross-validation fold.
+
+    Parameters
+    ----------
+    X_train, X_test : np.ndarray
+        Training and testing input data.
+    y_train, y_test : np.ndarray
+        Training and testing targets.
+    train_switch_ind, test_switch_ind : list[int]
+        Indices marking boundaries between blocks in the train and test sets.
+    current_save_path : str
+        Directory in which to save model artifacts and plots.
+    device : str or None, optional
+        GPU device identifier; if ``None``, automatically select CPU or CUDA.
+    shift, k : int, optional
+        Shift number and fold index used for bookkeeping.
+    hidden_dim, num_layers, dropout : int or float, optional
+        Hyperparameters for the :class:`LSTMDecoder`.
+    sequence_length : int, optional
+        Number of timesteps provided to the model at once.
+    target_index : int, optional
+        Index within each sequence corresponding to the prediction target.
+    batch_size : int, optional
+        Mini-batch size for training.
+    lr : float, optional
+        Learning rate for optimization.
+    num_epochs : int, optional
+        Maximum number of training epochs.
+    patience, min_delta, factor : int or float, optional
+        Early-stopping and learning-rate scheduler parameters.
+    plot_predictions : bool, optional
+        If ``True``, generate training and prediction plots.
+
+    Returns
+    -------
+    tuple
+        ``rmse`` per output dimension along with arrays of ``targets`` and
+        ``predictions``.
+    """
+
     # Set the device
     if device:
         os.environ['CUDA_VISIBLE_DEVICES'] = device
@@ -810,6 +976,7 @@ def process_fold(X_train, X_test, y_train, y_test, train_switch_ind, test_switch
 
 
 def plot_training(lstm_history, save_path, shift, k):
+    """Plot and save the training-loss curve."""
 
     optimal_loss = min(lstm_history)
     model_used_index = lstm_history.index(optimal_loss)
@@ -829,23 +996,25 @@ def plot_training(lstm_history, save_path, shift, k):
     plt.close()
 
 def plot_preds(targets, predictions, test_switch_ind, sequence_length, save_path, k, shift):
+    """Plot ground-truth and predicted traces for a test fold."""
+
     adjusted_test_switch_ind = [ind - sequence_length * k for k, ind in enumerate(test_switch_ind)]
     behavior_dim = targets.shape[1]
-    _, ax = plt.subplots(behavior_dim, 1, figsize=(20, 10), sharex= True)
+    _, ax = plt.subplots(behavior_dim, 1, figsize=(20, 10), sharex=True)
     if behavior_dim == 1:
         ax = [ax]
     for i in range(behavior_dim):
-        ax[i].plot(targets[:, i], label='True', color = 'crimson')
+        ax[i].plot(targets[:, i], label='True', color="crimson")
         ax[i].plot(predictions[:, i], label='Predicted')
         for ind in adjusted_test_switch_ind:
-            ax[i].axvline(ind, color='grey', linestyle = '--', alpha=0.5)
+            ax[i].axvline(ind, color="grey", linestyle="--", alpha=0.5)
 
     if behavior_dim > 4:
-        # remove the y-axis ticks 
+        # remove the y-axis ticks
         for a in ax:
             a.set_yticks([])
     plt.xlabel('Time')
-    ax[0].legend(loc = 'upper right')
+    ax[0].legend(loc='upper right')
 
     sns.despine()
     plt.savefig(os.path.join(save_path, f'lstm_predictions_k_{k}_shift_{shift}.png'), dpi=300)
