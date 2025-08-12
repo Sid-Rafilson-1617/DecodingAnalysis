@@ -120,7 +120,11 @@ def compute_spike_rates(kilosort_dir: str, sampling_rate: int, window_size: floa
     recording_duration = np.max(spike_times)
 
     # Define time windows
-    time_bins = np.arange(0, recording_duration - window_size, step_size)
+    # ``np.arange`` excludes the stop value, which would drop the final
+    # possible window starting at ``recording_duration - window_size``.
+    # Adding ``step_size`` to the stop value ensures the last window is
+    # included without exceeding the recording duration.
+    time_bins = np.arange(0, recording_duration - window_size + step_size, step_size)
     num_windows = len(time_bins)
 
     # Separate OB and HC units
@@ -220,7 +224,7 @@ def compute_sniff_freqs_bins(sniff_params_file: str, time_bins: np.ndarray, wind
 
 
 
-def align_brain_and_behavior(events: pd.DataFrame, spike_rates: np.ndarray, units: np.ndarray, time_bins: np.ndarray, window_size: float = 0.1, speed_threshold: float = 100, interp_method = 'linear', order = None):
+def align_brain_and_behavior(events: pd.DataFrame, spike_rates: np.ndarray, units: np.ndarray, time_bins: np.ndarray, window_size: float = 0.1, speed_threshold: float = 4.0, interp_method='linear', order=None):
     
     """
     Align neural spike rate data with behavioral tracking data using time windows.
@@ -253,8 +257,9 @@ def align_brain_and_behavior(events: pd.DataFrame, spike_rates: np.ndarray, unit
         Size of each time window in seconds, default is 0.1.
     
     speed_threshold : float, optional
-        Threshold for removing speed outliers, expressed as multiplier of standard deviation, 
-        default is 4.0 (values > 4 × std are treated as outliers).
+        Threshold for removing speed outliers, expressed as a multiplier of the
+        standard deviation. Default is 4.0 (values > 4 × std are treated as
+        outliers).
     
     Returns
     -------
@@ -317,11 +322,14 @@ def align_brain_and_behavior(events: pd.DataFrame, spike_rates: np.ndarray, unit
     data['v_x'] = mean_velocities_x / conversion # convert to cm/s
     data['v_y'] = mean_velocities_y / conversion # convert to cm/s
     data['speed'] = mean_speeds / conversion # convert to cm/s
-    data['time'] = time_bins # in seconds
+    data['time'] = time_bins  # in seconds
     data['reward_state'] = mean_rewards
 
-    
-    data.loc[data['speed'] > speed_threshold, ['x', 'y', 'v_x', 'v_y', 'speed']] = np.nan
+    # Remove speed outliers based on a standard deviation threshold
+    speed_std = np.nanstd(data['speed'])
+    if speed_std == 0:
+        speed_std = 1  # avoid zero division / blanket removal
+    data.loc[data['speed'] > speed_threshold * speed_std, ['x', 'y', 'v_x', 'v_y', 'speed']] = np.nan
 
     # interpolating the tracking data to fill in NaN values
     data.interpolate(method=interp_method, inplace=True, order = order)
