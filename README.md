@@ -9,7 +9,7 @@ Decoding analysis for the clickbait-ephys experiments designed by **Nate Hess**:
 - **core.py** – functions for loading Kilosort outputs, computing smoothed spike rates, and preparing datasets.
 - **LSTM_decoding.py** – training script for LSTM models that decode behavioral variables from neural activity.
 - **envirnment.yml** – conda environment with required dependencies.
-- **example_notebook.ipynb** and **posprocessing.ipynb** – notebooks for exploratory analysis and post-processing.
+- **example_notebook.ipynb** and **postprocessing.ipynb** – notebooks for exploratory analysis and post-processing.
 - **submit_LSTM.sh** – SLURM job array script for the University of Oregon's Talapas cluster, allowing each session and hyperparameter combination to run on parallel GPU cores.
 
 ## Setup
